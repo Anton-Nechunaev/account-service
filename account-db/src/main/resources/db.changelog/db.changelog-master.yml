@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - property:
+      name: schemaName
+      value: public
+  - changeSet:
+      id: 2024-10-04-v0.0.1-changelog
+      author: Aliaksandr_Azaronak
+  - include:
+      file: ${CHANGELOG_BASE}/v1.0/01-ddl-moddatetime.yml
+  - include:
+      file: ${CHANGELOG_BASE}/v1.0/02-ddl-pgcrypto.yml
+  - include:
+      file: ${CHANGELOG_BASE}/v1.0/03-ddl-account-details.yml
+  - include:
+      file: ${CHANGELOG_BASE}/v1.0/04-ddl-condition.yml
+  - include:
+      file: ${CHANGELOG_BASE}/v1.0/05-ddl-currency.yml
+  - include:
+      file: ${CHANGELOG_BASE}/v1.0/06-ddl-account.yml
+  - include:
+      file: ${CHANGELOG_BASE}/v1.0/07-ddl-transaction.yml

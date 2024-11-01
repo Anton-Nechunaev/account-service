@@ -1,0 +1,158 @@
+stages:
+  - build
+  - test
+  - package
+  - docker
+  - deploy
+  - liquibase
+
+default:
+  tags:
+    - runner-account
+
+variables:
+  MAVEN_CLI_OPTS: "-Dmaven.repo.local=.m2/repository --settings .m2/settings.xml --batch-mode --errors --fail-at-end --show-version"
+  LIQUIBASE_PARAMS: "--changeLogFile=$CHANGELOG_BASE/$CHANGELOG_FILE_NAME --url=$DATASOURCE_URL --username=$DATASOURCE_USERNAME --password=$DATASOURCE_PASSWORD --logLevel=info"
+
+before_script:
+  - sed -i "s/\$NEXUS_ACTIVE_BANK_USER/${NEXUS_ACTIVE_BANK_USER}/" .m2/settings.xml
+  - sed -i "s/\$NEXUS_ACTIVE_BANK_PASSWORD/${NEXUS_ACTIVE_BANK_PASSWORD}/" .m2/settings.xml
+
+build:
+  image: maven:3.9.6
+  stage: build
+  script:
+    - mvn $MAVEN_CLI_OPTS clean compile
+  environment:
+    name: develop
+  only:
+    - develop
+    - merge_requests
+
+test:
+  image: maven:3.9.6
+  stage: test
+  variables:
+    DOCKER_TLS_CERTDIR: ''
+    DOCKER_HOST: tcp://172.17.1.101:2375
+    DOCKER_DRIVER: overlay2
+  script:
+    - mvn -Dsonar.scm.disabled=True $MAVEN_CLI_OPTS verify sonar:sonar
+      -Dsonar.projectKey=active-bank-account-sonar
+      -Dsonar.projectName=${CI_PROJECT_PATH_SLUG}:${CI_COMMIT_REF_SLUG}
+      -Dsonar.projectVersion=0.0.1
+      -Dsonar.links.ci=$CI_PIPELINE_URL
+      -Dsonar.login=$SONAR_LOGIN
+      -Dsonar.host.url=$SONAR_HOST_URL
+      -Dsonar.coverage.jacoco.xmlReportPaths=${CI_BUILDS_DIR}/${CI_PROJECT_PATH}/account-impl/target/jacoco-ui/jacoco.xml
+      -Dsonar.qualitygate.wait=false
+      -Dsonar.java.test.exclude=test
+    - cat account-impl/target/jacoco-ui/index.html | grep -o 'Total[^%]*%' | sed 's/<.*>/ /; s/Total/Unit Tests Coverage Total:/' || true
+  coverage: /Unit Tests Coverage Total:\s*([^%]+)/
+  environment:
+    name: develop
+  dependencies:
+    - build
+  allow_failure: false
+  only:
+    - develop
+    - merge_requests
+
+package:
+  image: maven:3.9.6
+  stage: package
+  script:
+    - mvn $MAVEN_CLI_OPTS -DskipTests package
+  environment:
+    name: develop
+  artifacts:
+    expire_in: 20 min
+    paths:
+      - account-impl/target/*.jar
+  only:
+    - develop
+    - merge_requests
+
+docker:
+  image: docker:stable
+  stage: docker
+  variables:
+    DOCKER_TLS_CERTDIR: ''
+    DOCKER_HOST: tcp://172.17.1.101:2375
+    DOCKER_DRIVER: overlay2
+  script:
+    - echo "${AND_DOCKER_REGISTRY_RW_PASS}" | docker login -u ${AND_REGESTRY_USER_RW} ${AND_DOCKER_REGISTRY_NAME} --password-stdin
+    - docker build --tag ${AND_DOCKER_REGISTRY_NAME}/${CI_PROJECT_PATH_SLUG}:${CI_COMMIT_REF_SLUG} .
+    - docker push ${AND_DOCKER_REGISTRY_NAME}/${CI_PROJECT_PATH_SLUG}:${CI_COMMIT_REF_SLUG}
+  environment:
+    name: develop
+  dependencies:
+    - package
+  only:
+    - develop
+
+deploy:
+  image: docker:stable
+  stage: deploy
+  variables:
+    DOCKER_TLS_CERTDIR: ''
+    DOCKER_HOST: tcp://172.17.1.101:2375
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - echo "${AND_DOCKER_REGISTRY_RW_PASS}" | docker login -u ${AND_REGESTRY_USER_RW} ${AND_DOCKER_REGISTRY_NAME} --password-stdin
+    - docker stop ${CI_PROJECT_NAME} || true
+    - docker rm -v -f ${CI_PROJECT_NAME} || true
+    - docker pull ${AND_DOCKER_REGISTRY_NAME}/${CI_PROJECT_PATH_SLUG}:${CI_COMMIT_REF_SLUG}
+  script:
+    - docker run -d --restart=always --name ${CI_PROJECT_NAME}
+      --publish 8084:8084
+      --network active_bank
+      --env-file ${ENVIRONMENT_ACCOUNT}
+      ${AND_DOCKER_REGISTRY_NAME}/${CI_PROJECT_PATH_SLUG}:${CI_COMMIT_REF_SLUG}
+  after_script:
+    - docker system prune -af --filter "label!=keep"
+  environment:
+    name: develop
+  dependencies: [ ]
+  resource_group: ${CI_ENVIRONMENT_SLUG}
+  only:
+    - develop
+
+liquibase_verify:
+  image: liquibase/liquibase:4.5.0
+  stage: liquibase
+  script:
+    - liquibase $LIQUIBASE_PARAMS status --verbose
+    - liquibase $LIQUIBASE_PARAMS validate
+  environment:
+    name: liquibase
+  dependencies: []
+  allow_failure: false
+  only:
+    - develop
+    - merge_requests
+
+liquibase_update:
+  image: liquibase/liquibase:4.5.0
+  stage: liquibase
+  script:
+    - liquibase $LIQUIBASE_PARAMS update
+  environment:
+    name: liquibase
+  dependencies: []
+  needs: ["liquibase_verify"]
+  when: manual
+  only:
+    - develop
+
+liquibase_rollback:
+  image: liquibase/liquibase:4.5.0
+  stage: liquibase
+  script:
+    - liquibase $LIQUIBASE_PARAMS rollbackCount $COUNT
+  environment:
+    name: liquibase
+  dependencies: []
+  when: manual
+  only:
+    - develop

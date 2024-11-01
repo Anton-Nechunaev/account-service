@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: create_moddatetime
+      author: Alexander_Azaronak
+      changes:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/moddatetime/add/ddl-add-moddatetime.sql
+      rollback:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/moddatetime/drop/ddl-drop-moddatetime.sql

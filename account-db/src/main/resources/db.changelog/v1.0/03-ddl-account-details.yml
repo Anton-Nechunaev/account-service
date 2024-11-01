@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - property:
+      name: tableNameAccountDetails
+      value: account_details
+  - changeSet:
+      id: create_account_details
+      author: Alexander_Azaronak
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: "${schemaName}.${tableNameAccountDetails}"
+      changes:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/table/create/ddl-create-table-account-details.sql
+      rollback:
+        - dropTable:
+            tableName: account_details
+  - changeSet:
+      id: create-in-account-details-trigger-for-update-date
+      author: Alexander_Azaronak
+      changes:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/triggers/add/ddl-add-in-account-details-trigger-for-update-date.sql
+      rollback:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/triggers/drop/ddl-drop-in-account-details-trigger-for-update-date.sql

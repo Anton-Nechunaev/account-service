@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - property:
+      name: tableNameCurrency
+      value: currency
+  - changeSet:
+      id: create_account_enums
+      author: Alexander_Azaronak
+      changes:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/enums/add/ddl-add-currency-enums.sql
+      rollback:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/enums/drop/ddl-drop-currency-enums.sql
+  - changeSet:
+      id: create_currency
+      author: Alexander_Azaronak
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: "${schemaName}.${tableNameCurrency}"
+      changes:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/table/create/ddl-create-table-currency.sql
+      rollback:
+        - dropTable:
+            tableName: currency

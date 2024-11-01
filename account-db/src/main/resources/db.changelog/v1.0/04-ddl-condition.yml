@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - property:
+      name: tableNameCondition
+      value: condition
+  - changeSet:
+      id: create_condition_enums
+      author: Alexander_Azaronak
+      changes:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/enums/add/ddl-add-condition-enums.sql
+      rollback:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/enums/drop/ddl-drop-condition-enums.sql
+  - changeSet:
+      id: create_condition
+      author: Alexander_Azaronak
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: "${schemaName}.${tableNameCondition}"
+      changes:
+        - sqlFile:
+            path: ${CHANGELOG_BASE}/v1.0/sql/table/create/ddl-create-table-condition.sql
+      rollback:
+        - dropTable:
+            tableName: condition
